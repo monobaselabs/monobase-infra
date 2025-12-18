@@ -1,0 +1,73 @@
+# Velero Resources Configuration
+# BackupStorageLocations and Backup Schedules
+
+# Velero configuration
+velero:
+  enabled: true
+
+  # Cloud provider: aws, azure, gcp, or digitalocean
+  provider: aws
+
+  # AWS configuration
+  aws:
+    region: us-east-1
+    bucket: ""  # S3 bucket name (required)
+
+  # Azure configuration
+  azure:
+    resourceGroup: ""
+    storageAccount: ""
+    blobContainer: ""
+
+  # GCP configuration
+  gcp:
+    bucket: ""
+    project: ""
+
+  # DigitalOcean configuration
+  digitalocean:
+    bucket: ""
+    region: nyc3
+
+  # Backup schedules
+  schedules:
+    # Infrastructure backup (hourly)
+    infrastructure:
+      hourly:
+        enabled: true
+        schedule: "0 * * * *"  # Every hour
+        ttl: 72h  # 3 days
+      daily:
+        enabled: true
+        schedule: "0 3 * * *"  # 3 AM daily
+        ttl: 168h  # 7 days
+      weekly:
+        enabled: true
+        schedule: "0 4 * * 0"  # 4 AM Sunday
+        ttl: 720h  # 30 days
+
+    # Application backups (per deployment)
+    applications:
+      daily:
+        enabled: true
+        schedule: "0 2 * * *"  # 2 AM daily
+        ttl: 168h  # 7 days
+      weekly:
+        enabled: true
+        schedule: "0 3 * * 0"  # 3 AM Sunday
+        ttl: 720h  # 30 days
+
+    # Cluster resources backup (weekly)
+    cluster:
+      weekly:
+        enabled: true
+        schedule: "0 4 * * 0"  # 4 AM Sunday
+        retention: 2160h  # 90 days
+
+# Kyverno policy engine (for policy enforcement)
+kyverno:
+  enabled: false
+
+# Falco runtime security (for rule enforcement)
+falco:
+  enabled: false

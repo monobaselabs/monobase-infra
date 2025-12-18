@@ -1,0 +1,262 @@
+# Default values for Monobase API chart
+# This is a YAML-formatted file with sensible defaults
+# Override these values in config/{client}/values-{env}.yaml
+
+# Global configuration (shared across charts)
+global:
+  domain: example.com
+  namespace: example-prod
+  environment: production
+  gateway:
+    name: shared-gateway
+    namespace: gateway-system
+
+# Monobase API application configuration
+enabled: true
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/monobaselabs/api
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+
+service:
+  type: ClusterIP
+  port: 7213
+  targetPort: 7213
+  annotations: {}
+
+# Gateway API HTTPRoute configuration
+gateway:
+  enabled: true
+  hostname: ""  # Empty = uses api.{global.domain}
+  parentRefs:
+    - name: shared-gateway
+      namespace: gateway-system
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /livez
+    port: 7213
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /readyz
+    port: 7213
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 2
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+
+# Node pool scheduling (optional, disabled by default)
+# Inherits from global.nodePool if configured
+# nodePool:
+#   enabled: false     # Set to false to explicitly disable (overrides global)
+#   name: "staging"    # Override global node pool name
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/name
+                operator: In
+                values:
+                  - api
+          topologyKey: kubernetes.io/hostname
+
+# Application configuration (ConfigMap)
+config:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  PORT: "7213"
+  # Database URL from secrets
+  # S3 configuration from secrets/ConfigMap
+  # SMTP configuration from secrets/ConfigMap
+
+# External Secrets configuration
+externalSecrets:
+  enabled: false  # Disabled by default, enable in deployment values
+  secretStore: "gcp-secretstore"  # ClusterSecretStore name
+  refreshInterval: 1h
+  secrets: []
+
+# Network Policy configuration
+networkPolicy:
+  enabled: true  # Enable by default for security
+  gateway:
+    namespace: envoy-gateway-system
+    name: envoy-gateway
+  typesense:
+    enabled: false  # Enable if typesense is deployed
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Ingress: Allow from Gateway
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy-gateway
+      ports:
+        - protocol: TCP
+          port: 7213
+  egress:
+    # Egress: Allow to PostgreSQL, MinIO, Valkey, Typesense, DNS, K8s API, HTTPS
+    # PostgreSQL database
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: primary
+      ports:
+        - protocol: TCP
+          port: 5432
+    # MinIO storage
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: minio
+      ports:
+        - protocol: TCP
+          port: 9000
+    # Valkey (Redis-compatible cache)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: valkey
+      ports:
+        - protocol: TCP
+          port: 6379
+    # Mailpit SMTP (if enabled)
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mailpit
+      ports:
+        - protocol: TCP
+          port: 1025
+    # DNS resolution
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+    # Kubernetes API server
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              component: apiserver
+      ports:
+        - protocol: TCP
+          port: 443
+    # HTTPS egress (external APIs, SMTP via TLS)
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 587  # SMTP TLS
+
+# Service Monitor for Prometheus (if monitoring enabled)
+serviceMonitor:
+  enabled: false
+  interval: 30s
+  path: /metrics
+
+# PostgreSQL dependency configuration
+postgresql:
+  enabled: true
+  architecture: standalone
+  # Service name override - use when PostgreSQL is deployed separately
+  # Default: uses Release.Name (e.g., "api-postgresql")
+  # Set to "postgresql" when PostgreSQL has its own release
+  serviceName: ""
+  auth:
+    enabled: true
+    existingSecret: ""
+    database: postgres
+    username: postgres
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 100Gi
+
+# Valkey (Redis-compatible cache) dependency configuration
+valkey:
+  enabled: true
+  architecture: replication
+  master:
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 8Gi
+
+# Mailpit dependency configuration (email testing for dev/staging)
+mailpit:
+  enabled: false

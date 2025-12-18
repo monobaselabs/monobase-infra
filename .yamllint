@@ -1,0 +1,27 @@
+---
+extends: default
+
+# Ignore Helm chart templates and files with Go templating
+ignore: |
+  charts/*/templates/
+  .github/workflows/
+  infrastructure/security/networkpolicies/
+  infrastructure/security/encryption/
+  infrastructure/monitoring/helm-values.yaml
+  tofu/**/.terraform/
+
+rules:
+  line-length:
+    max: 120
+    level: warning
+
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+  comments:
+    min-spaces-from-content: 1
+
+  document-start: disable
+  truthy:
+    allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']

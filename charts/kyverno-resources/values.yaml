@@ -1,0 +1,70 @@
+# Kyverno Resources Configuration
+# Policy enforcement rules for security and compliance
+
+# Policies are deployed cluster-wide (no namespace needed)
+
+# Enable/disable specific policies
+policies:
+  # Pod Security Standards (Restricted Profile)
+  podSecurity:
+    enabled: true
+    validationFailureAction: enforce  # or "audit" for testing
+
+  # Require Standard Labels
+  requireLabels:
+    enabled: true
+    validationFailureAction: enforce  # or "audit"
+
+  # Restrict Image Registries
+  restrictRegistries:
+    enabled: true
+    validationFailureAction: audit  # Start with audit, move to enforce later
+
+    # Approved container registries
+    # Add new registries here as needed
+    allowedRegistries:
+      # Your organization
+      - "ghcr.io/monobaselabs/*"
+
+      # Trusted third-party registries
+      - "bitnami/*"
+      - "registry.k8s.io/*"
+      - "k8s.gcr.io/*"
+
+      # Monitoring tools
+      - "docker.io/grafana/*"
+      - "docker.io/prom/*"
+      - "quay.io/prometheus/*"
+      - "quay.io/prometheus-operator/*"
+
+      # Cert-manager
+      - "quay.io/jetstack/*"
+
+      # Security tools
+      - "docker.io/falcosecurity/*"
+      - "ghcr.io/kyverno/*"
+
+      # External Secrets
+      - "ghcr.io/external-secrets/*"
+
+      # Envoy Gateway
+      - "envoyproxy/*"
+      - "docker.io/envoyproxy/*"
+
+      # PostgreSQL
+      - "docker.io/bitnami/postgresql*"
+
+      # Valkey (Redis)
+      - "docker.io/valkey/*"
+      - "docker.io/bitnami/valkey*"
+
+      # MinIO
+      - "quay.io/minio/*"
+      - "docker.io/minio/*"
+
+      # Velero
+      - "velero/*"
+      - "gcr.io/velero-gcp/*"
+
+      # ArgoCD
+      - "quay.io/argoproj/*"

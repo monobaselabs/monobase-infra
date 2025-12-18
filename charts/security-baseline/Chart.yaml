@@ -1,0 +1,14 @@
+apiVersion: v2
+name: security-baseline
+description: Namespace-wide security baseline (default-deny, cross-namespace isolation)
+type: application
+version: 2.0.0
+appVersion: "2.0"
+keywords:
+  - security
+  - networkpolicy
+  - rbac
+  - zero-trust
+maintainers:
+  - name: Monobase
+    email: hello@monobase.com

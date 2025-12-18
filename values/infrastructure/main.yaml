@@ -1,0 +1,428 @@
+# Default values for monobase-infrastructure Helm chart
+# These control cluster-wide infrastructure components
+
+# ArgoCD Bootstrap Configuration
+# Used by charts/argocd-bootstrap/ to create infrastructure-root and applicationset
+argocd:
+  # Git repository for GitOps
+  # DEPLOYMENT-SPECIFIC: Override chart default (template points to monobaselabs/monobase-infra)
+  repoURL: https://github.com/acme/monobase-infra.git
+  targetRevision: HEAD
+
+  # ArgoCD Installation Configuration
+  # Chart: https://github.com/argoproj/argo-helm
+  # Version: 5.x+
+
+  # Simplified configuration (non-HA)
+  redis-ha:
+    enabled: false  # Use standard Redis instead
+
+  # Controller (reconciliation engine)
+  controller:
+    replicas: 1  # Single replica sufficient for simple deployments
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false  # Enable when monitoring stack is deployed
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 768Mi  # Increased from 512Mi - prevent OOM (actual usage: 607Mi)
+      limits:
+        cpu: 1
+        memory: 896Mi  # Optimized from 1Gi (actual usage: 608Mi = 68%)
+
+  # Server (API and UI)
+  server:
+    replicas: 1  # Single replica
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 192Mi  # Optimized from 256Mi (actual usage: 31Mi = 16%)
+      limits:
+        cpu: 500m
+        memory: 384Mi  # Optimized from 512Mi (actual usage: 31Mi = 8%)
+
+    # Ingress via Gateway API (see ingress.yaml)
+    ingress:
+      enabled: false
+
+    # Server configuration
+    config:
+      # Git repository credentials
+      repositories: |
+        - type: git
+          url: https://github.com/acme/monobase-infra.git
+
+      # Resource customizations
+      resource.customizations: |
+        argoproj.io/Application:
+          health.lua: |
+            hs = {}
+            hs.status = "Progressing"
+            hs.message = ""
+            if obj.status ~= nil then
+              if obj.status.health ~= nil then
+                hs.status = obj.status.health.status
+                if obj.status.health.message ~= nil then
+                  hs.message = obj.status.health.message
+                end
+              end
+            end
+            return hs
+
+    # RBAC configuration
+    rbacConfig:
+      policy.default: role:readonly
+      policy.csv: |
+        # Default policies
+        p, role:readonly, applications, get, */*, allow
+        p, role:readonly, projects, get, *, allow
+
+        # Admin role
+        g, admin, role:admin
+
+    # Admin password (from secret)
+    extraArgs:
+      - --insecure  # TLS termination at Gateway
+
+  # Repo Server (Git repository interaction)
+  repoServer:
+    replicas: 1  # Single replica
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 1536Mi  # Increased to handle concurrent Helm renders
+      limits:
+        cpu: 1
+        memory: 2560Mi  # Increased to prevent OOM during heavy sync operations
+
+  # ApplicationSet Controller (App-of-Apps)
+  applicationSet:
+    enabled: true
+    replicas: 1  # Single replica
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: false
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+  # Notifications Controller
+  notifications:
+    enabled: true
+
+    argocdUrl: https://argocd.example.com  # DEPLOYMENT-SPECIFIC: Set to actual ArgoCD URL per environment
+
+    notifiers:
+      # Slack notifications
+      service.slack: |
+        token: $slack-token
+      # Email notifications (requires SMTP configuration in deployment-specific values)
+      # service.email: |
+      #   host: smtp.gmail.com
+      #   port: 587
+      #   from: argocd@yourdomain.com
+
+    templates:
+      template.app-deployed: |
+        message: |
+          Application {{.app.metadata.name}} deployed to {{.app.spec.destination.namespace}}
+        slack:
+          attachments: |
+            [{
+              "title": "{{.app.metadata.name}}",
+              "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+              "color": "#18be52",
+              "fields": [{
+                "title": "Sync Status",
+                "value": "{{.app.status.sync.status}}",
+                "short": true
+              }, {
+                "title": "Repository",
+                "value": "{{.app.spec.source.repoURL}}",
+                "short": true
+              }]
+            }]
+
+      template.app-sync-failed: |
+        message: |
+          Application {{.app.metadata.name}} sync failed
+        slack:
+          attachments: |
+            [{
+              "title": "{{.app.metadata.name}}",
+              "title_link": "{{.context.argocdUrl}}/applications/{{.app.metadata.name}}",
+              "color": "#ff0000",
+              "fields": [{
+                "title": "Sync Status",
+                "value": "{{.app.status.sync.status}}",
+                "short": true
+              }]
+            }]
+
+    triggers:
+      trigger.on-deployed: |
+        - when: app.status.sync.status == 'Synced'
+          send: [app-deployed]
+
+      trigger.on-sync-failed: |
+        - when: app.status.sync.status == 'Failed'
+          send: [app-sync-failed]
+
+  # Dex (SSO/OAuth - optional)
+  dex:
+    enabled: false  # Enable for SSO integration
+
+  # Configs
+  configs:
+    secret:
+      createSecret: true
+      # argocdServerAdminPassword: ""  # Set via External Secrets
+
+    # Known hosts for Git SSH
+    ssh:
+      knownHosts: |
+        github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+
+  # Redis (cache) - standard single instance
+  redis:
+    enabled: true
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+# Cert Manager - TLS certificate automation (infrastructure-wide)
+certManager:
+  enabled: true
+
+  # ClusterIssuers configuration
+  issuers:
+    # HTTP-01 challenge type (no DNS provider needed)
+    - name: letsencrypt-prod
+      email: "admin@acme.com"
+      server: production
+      provider: http01
+      http01:
+        gatewayName: shared-gateway
+        gatewayNamespace: gateway-system
+
+    - name: letsencrypt-staging
+      email: "admin@acme.com"
+      server: staging
+      provider: http01
+      http01:
+        gatewayName: shared-gateway
+        gatewayNamespace: gateway-system
+
+# Gateway API - Ingress and routing
+gateway:
+  enabled: true
+
+  # DEPLOYMENT-SPECIFIC: Override chart default (template uses example.com)
+  domain: acme.com
+
+  # TLS/Certificate configuration - Per-app certificates
+  # DEPLOYMENT-SPECIFIC: Certificate hostnames for this deployment
+  certificates:
+    # Staging environment
+    - name: staging-api-tls
+      hostname: api.stg.acme.com
+      enabled: true
+    - name: staging-account-tls
+      hostname: account.stg.acme.com
+      enabled: true
+    - name: staging-patient-tls
+      hostname: patient.stg.acme.com
+      enabled: true
+    - name: staging-provider-tls
+      hostname: provider.stg.acme.com
+      enabled: true
+    - name: staging-website-tls
+      hostname: www.stg.acme.com
+      enabled: true
+    - name: staging-minio-tls
+      hostname: storage.stg.acme.com
+      enabled: true
+    - name: staging-mailpit-tls
+      hostname: mail.stg.acme.com
+      enabled: true
+
+    # Production environment
+    - name: production-api-tls
+      hostname: api.acme.com
+      enabled: true
+    - name: production-storage-tls
+      hostname: storage.acme.com
+      enabled: true
+
+  # HTTP to HTTPS redirect
+  # DEPLOYMENT-SPECIFIC: Override chart default (disabled due to HTTP-01 ACME challenge)
+  httpRedirect:
+    enabled: false
+
+# External Secrets - Secret management
+externalSecrets:
+  enabled: true
+
+  # ClusterSecretStore configurations
+  # See charts/external-secrets-stores/README.md for detailed configuration
+  # DEPLOYMENT-SPECIFIC: GCP project and service account configuration
+  stores:
+    # GCP Secret Manager store (current setup)
+    - name: gcp-secretstore
+      provider: gcp
+      gcp:
+        projectId: "mc-v4-prod"  # GCP Secret Manager project
+        auth:
+          # Using Service Account Key authentication (works on any K8s cluster)
+          serviceAccountKey:
+            enabled: true
+            secretRef:
+              name: gcpsm-secret
+              key: secret-access-credentials
+              namespace: external-secrets-system
+          # Alternative: Workload Identity (for GKE only)
+          workloadIdentity:
+            enabled: false
+            clusterLocation: us-central1
+            clusterName: ""
+            serviceAccountRef:
+              name: external-secrets
+              namespace: external-secrets-system
+
+# External DNS - Automatic DNS record management from HTTPRoutes
+externalDNS:
+  enabled: true
+
+  # External Secrets configuration
+  # Creates ExternalSecret to sync DNS provider API token from secret manager
+  externalSecrets:
+    enabled: true
+    secretStore: "gcp-secretstore"
+    refreshInterval: "1h"
+    remoteKey: "acme-infra-cloudflare-api-token"
+    generator:
+      generate: false
+      type: token
+      description: "Cloudflare API token for DNS management"
+
+  # Multiple External DNS instances
+  # Each instance can manage different DNS provider and domains
+  instances:
+    # Primary instance: Cloudflare for acme.com (all environments)
+    - name: primary
+      enabled: true
+      provider: cloudflare
+
+      # Manage all acme.com subdomains across all namespaces
+      domainFilters:
+        - acme.com
+
+      # Cloudflare-specific configuration
+      cloudflare:
+        proxied: false  # DNS only, no Cloudflare proxy
+        apiTokenSecretRef:
+          name: cloudflare-api-token
+          key: api-token
+
+      # Resource limits
+      resources:
+        requests:
+          cpu: 10m
+          memory: 32Mi
+        limits:
+          cpu: 50m
+          memory: 64Mi
+
+    # Example: Add new client with different DNS provider
+    # - name: client-a
+    #   enabled: true
+    #   provider: route53
+    #   domainFilters:
+    #     - clienta.com
+    #   aws:
+    #     region: us-east-1
+    #     zoneType: public
+    #   resources:
+    #     requests:
+    #       cpu: 10m
+    #       memory: 32Mi
+    #     limits:
+    #       cpu: 50m
+    #       memory: 64Mi
+
+# Kyverno - Policy engine
+kyverno:
+  enabled: false
+
+# Velero - Backup and disaster recovery
+velero:
+  enabled: false
+
+# Falco - Runtime security monitoring
+falco:
+  enabled: false
+
+# Monitoring - Prometheus + Grafana stack
+monitoring:
+  enabled: true
+  
+  # Prometheus configuration
+  prometheus:
+    retention: 30d  # How long to keep metrics
+    storageSize: 50Gi  # Prometheus data storage
+    storageClass: ""  # Auto-detect from cluster default
+  
+  # Grafana configuration (deployed as separate wrapper chart)
+  grafana:
+    enabled: true  # Enable Grafana deployment
+
+    # Gateway configuration for Grafana UI access
+    gateway:
+      enabled: true
+      hostname: ""  # Uses grafana.{domain}
+      tls:
+        certManager:
+          enabled: true  # Enable automatic TLS certificate provisioning
+  
+  # Alertmanager configuration
+  alertmanager:
+    enabled: true
+    storageClass: ""  # Auto-detect
+    
+    # Slack notifications (optional)
+    slack:
+      webhookUrl: ""  # Set to Slack webhook URL for alerts
+    
+    # Email notifications (optional)
+    email:
+      smarthost: ""  # SMTP server (e.g., smtp.gmail.com:587)
+      from: ""  # From email address
+      to: ""  # To email address

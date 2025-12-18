@@ -1,0 +1,15 @@
+{{- if .Values.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "grafana.fullname" . }}-dashboard-global
+  namespace: {{ include "grafana.namespace" . }}
+  labels:
+    {{- include "grafana.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "Kubernetes"
+data:
+  global.json: |-
+{{ .Files.Get "dashboards/dashboard-global.json" | indent 4 }}
+{{- end }}

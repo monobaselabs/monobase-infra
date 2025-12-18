@@ -1,0 +1,102 @@
+# PostgreSQL Wrapper Chart - Default Values
+# Wraps Bitnami PostgreSQL chart with External Secrets integration
+
+# Global enable/disable toggle
+enabled: true
+
+# External Secrets configuration
+# Creates ExternalSecret to sync PostgreSQL credentials from GCP Secret Manager
+externalSecrets:
+  enabled: true
+  secretStore: "gcp-secretstore"
+  refreshInterval: "1h"
+  remoteKey: ""  # Must be provided in deployment values (e.g., monobase-staging-postgresql-password)
+
+# Bitnami PostgreSQL subchart values
+# Full configuration: https://github.com/bitnami/charts/tree/main/bitnami/postgresql
+postgresql:
+  enabled: true
+
+  # Authentication
+  auth:
+    existingSecret: "postgresql"  # References secret created by ExternalSecret
+    secretKeys:
+      adminPasswordKey: postgres-password
+    database: postgres
+    username: postgres
+
+  # Architecture
+  architecture: standalone
+
+  # Image
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/postgresql
+    tag: 16.4.0-debian-12-r13
+
+  # Persistence
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 20Gi
+
+  # Resources
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # Pod Disruption Budget
+  podDisruptionBudget:
+    enabled: false
+
+  # Primary configuration
+  primary:
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      runAsNonRoot: true
+      privileged: false
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+  # NetworkPolicy (Bitnami chart feature)
+  networkPolicy:
+    enabled: true
+
+    # Don't allow external connections (only from API within namespace)
+    allowExternal: false
+
+    # Allow connections from API pods
+    ingressRules:
+      primaryAccessOnlyFrom:
+        enabled: true
+        namespaceSelector: {}  # Same namespace
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: api
+
+      # Allow metrics scraping by Prometheus
+      customRules:
+        - from:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: monitoring
+            podSelector:
+              matchLabels:
+                app.kubernetes.io/name: prometheus
+          ports:
+            - protocol: TCP
+              port: 9187  # PostgreSQL exporter port

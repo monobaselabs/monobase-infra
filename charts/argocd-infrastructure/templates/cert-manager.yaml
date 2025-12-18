@@ -1,0 +1,124 @@
+{{- if .Values.certManager.enabled }}
+---
+# ArgoCD Application: cert-manager (Operator)
+# Sync Wave 0 - Deploy TLS certificate automation (cluster-wide)
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    chart: cert-manager
+    repoURL: https://charts.jetstack.io
+    targetRevision: {{ .Values.certManager.operator.version | default "v1.16.2" }}
+    helm:
+      releaseName: cert-manager
+      valuesObject:
+        installCRDs: true
+
+        # Enable Gateway API support for HTTP-01 challenges
+        config:
+          apiVersion: controller.config.cert-manager.io/v1alpha1
+          kind: ControllerConfiguration
+          enableGatewayAPI: true
+
+        global:
+          leaderElection:
+            namespace: cert-manager
+
+        # Resource limits for cert-manager components
+        # Actual usage: controller=39Mi, cainjector=89Mi, webhook=18Mi
+        resources:
+          requests:
+            cpu: 10m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+
+        cainjector:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 100m
+              memory: 256Mi
+
+        webhook:
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+{{- if .Values.certManager.issuers }}
+---
+# ArgoCD Application: cert-manager-issuers (Resources)
+# Sync Wave 1 - Deploy ClusterIssuers after cert-manager
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager-issuers
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: {{ .Values.argocd.repoURL }}
+    targetRevision: {{ .Values.argocd.targetRevision }}
+    path: charts/cert-manager-issuers
+    helm:
+      releaseName: cert-manager-issuers
+      values: |
+        issuers:
+          {{- toYaml .Values.certManager.issuers | nindent 10 }}
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        maxDuration: 3m
+{{- end }}
+{{- end }}

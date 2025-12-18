@@ -1,0 +1,14 @@
+apiVersion: v2
+name: kyverno-resources
+description: Kyverno policy enforcement rules for security, compliance, and governance
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - kyverno
+  - security
+  - policy
+  - compliance
+  - pod-security
+maintainers:
+  - name: Monobase Labs

@@ -1,0 +1,145 @@
+# MinIO Wrapper Chart - Default Values
+# Wraps Bitnami MinIO chart with External Secrets integration
+
+# Global enable/disable toggle
+enabled: true
+
+# External Secrets configuration
+# Creates ExternalSecret to sync MinIO credentials from GCP Secret Manager
+externalSecrets:
+  enabled: false
+  secretStore: "gcp-secretstore"
+  refreshInterval: "1h"
+  secrets: []  # Must be provided in deployment values
+    # Example:
+    # - remoteKey: monobase-staging-minio-root-password
+    #   generator:
+    #     generate: true
+    #     type: password
+    #     description: MinIO root password
+
+# Bitnami MinIO subchart values
+# Full configuration: https://github.com/bitnami/charts/tree/main/bitnami/minio
+minio:
+  enabled: true
+
+  # Mode
+  mode: standalone
+
+  # Image
+  image:
+    registry: docker.io
+    repository: bitnamilegacy/minio
+    tag: "2025.7.23-debian-12-r3"
+
+  # Authentication
+  auth:
+    existingSecret: "minio"  # References secret created by ExternalSecret
+
+  # Statefulset
+  statefulset:
+    replicaCount: 1
+
+  # Persistence
+  persistence:
+    enabled: true
+    storageClass: ""
+    size: 10Gi
+
+  # Resources
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Default buckets
+  defaultBuckets: "monobase-files"
+
+  # Buckets configuration
+  buckets:
+    - name: "monobase-files"
+
+  # Region
+  region: "us-east-1"
+
+  # Security Context
+  podSecurityContext:
+    enabled: true
+    fsGroup: 1001
+    fsGroupChangePolicy: "OnRootMismatch"
+
+  containerSecurityContext:
+    enabled: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    runAsNonRoot: true
+    privileged: false
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+    seccompProfile:
+      type: RuntimeDefault
+
+  # Gateway API HTTPRoute configuration (optional)
+  gateway:
+    enabled: false
+    hostname: ""  # Empty = uses storage.{global.domain}
+    parentRefs:
+      - name: shared-gateway
+        namespace: gateway-system
+
+    # Optional: Rate limiting configuration
+    rateLimit:
+      enabled: false
+      perIP:
+        requests: 100
+        unit: Second
+      burst:
+        requests: 200
+        unit: Second
+
+  # NetworkPolicy (Bitnami chart feature)
+  networkPolicy:
+    enabled: true
+
+    # Don't allow external connections (only from API and Gateway)
+    allowExternal: false
+
+    # Allow connections from API and Gateway
+    ingressRules:
+      - from:
+        - namespaceSelector: {}  # Same namespace
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api
+        ports:
+          - protocol: TCP
+            port: 9000
+
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: envoy-gateway-system
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: envoy-gateway
+        ports:
+          - protocol: TCP
+            port: 9000
+
+      # Allow metrics scraping
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+        ports:
+          - protocol: TCP
+            port: 9000

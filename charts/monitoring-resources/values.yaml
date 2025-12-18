@@ -1,0 +1,39 @@
+# Monitoring Resources Configuration
+# Grafana Dashboards, Prometheus Rules, and ServiceMonitors
+
+# Global namespace for monitoring resources
+# Typically "monitoring" but can be customized
+namespace: monitoring
+
+# Grafana Dashboards
+dashboards:
+  enabled: true
+  # Enable/disable specific dashboards
+  readme:
+    enabled: true
+  cluster:
+    enabled: true
+  api:
+    enabled: true
+  database:
+    enabled: true
+
+# Prometheus Rules (Alerts)
+rules:
+  enabled: true
+  # Alert severity levels
+  critical:
+    enabled: true
+  warning:
+    enabled: true
+
+# ServiceMonitors
+serviceMonitors:
+  enabled: true
+  # Which services to monitor
+  api:
+    enabled: true
+  postgresql:
+    enabled: true
+  gateway:
+    enabled: true

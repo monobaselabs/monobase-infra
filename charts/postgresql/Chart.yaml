@@ -1,0 +1,25 @@
+apiVersion: v2
+name: postgresql
+description: PostgreSQL database with External Secrets integration
+type: application
+version: 1.0.0
+appVersion: "16.4.0"
+
+keywords:
+  - postgresql
+  - database
+  - external-secrets
+
+maintainers:
+  - name: Monobase
+    email: hello@monobase.com
+
+dependencies:
+  - name: postgresql
+    version: 16.7.27
+    repository: oci://registry-1.docker.io/bitnamicharts
+    condition: postgresql.enabled
+
+annotations:
+  category: Database
+  licenses: Apache-2.0

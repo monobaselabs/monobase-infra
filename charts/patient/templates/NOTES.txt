@@ -1,0 +1,43 @@
+{{- if .Values.enabled }}
+🎉 Account Frontend has been deployed!
+
+Chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+Release: {{ .Release.Name }}
+Namespace: {{ include "patient.namespace" . }}
+
+📋 Deployment Information:
+  - Replicas: {{ .Values.replicaCount }}
+  - Image: {{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+  - Service: {{ include "patient.fullname" . }}:{{ .Values.service.port }}
+
+🌐 Access Information:
+{{- if .Values.gateway.enabled }}
+  Account App: https://{{ include "patient.gateway.hostname" . }}
+
+  Open in browser:
+  open https://{{ include "patient.gateway.hostname" . }}
+{{- else }}
+  Gateway is disabled. Use port-forward to access:
+  kubectl port-forward -n {{ include "patient.namespace" . }} svc/{{ include "patient.fullname" . }} 8080:{{ .Values.service.port }}
+  # Open http://localhost:8080
+{{- end }}
+
+🔍 Next Steps:
+  1. Verify pods are running:
+     kubectl get pods -n {{ include "patient.namespace" . }} -l app.kubernetes.io/name={{ include "patient.name" . }}
+
+  2. Check logs:
+     kubectl logs -n {{ include "patient.namespace" . }} -l app.kubernetes.io/name={{ include "patient.name" . }} --tail=50
+
+  3. Test frontend:
+     curl https://{{ include "patient.gateway.hostname" . }}
+
+📱 Frontend Features:
+  - Static file serving (nginx)
+  - Read-only root filesystem (security)
+  - CDN-ready configuration
+  - Environment variable injection
+
+{{- else }}
+Account Frontend is disabled (enabled: false)
+{{- end }}

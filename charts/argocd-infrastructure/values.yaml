@@ -1,0 +1,61 @@
+# Default values for argocd-infrastructure chart
+# This chart manages infrastructure component Applications via ArgoCD
+#
+# Component versions and enabled flags have sensible defaults here.
+# Override in values/infrastructure/main.yaml for deployment-specific configuration.
+
+# Cert Manager - TLS certificate automation (infrastructure-wide)
+certManager:
+  enabled: true
+  operator:
+    version: v1.16.2
+  # Issuer configuration is deployment-specific (override in main.yaml)
+  issuers: []
+
+# Gateway API - Ingress and routing
+gateway:
+  enabled: true
+  operator:
+    version: v1.2.0
+  # Gateway configuration has defaults in charts/gateway/values.yaml
+  # Override domain and certificates in main.yaml per deployment
+
+# External Secrets - Secret management
+externalSecrets:
+  enabled: true
+  version: 0.9.11
+  provider: gcp
+  
+  # ClusterSecretStore configurations (deployment-specific)
+  stores: []
+
+# External DNS - Automatic DNS record management from HTTPRoutes
+externalDNS:
+  enabled: true
+  # Instance configuration is deployment-specific (override in main.yaml)
+
+# Kyverno - Policy engine
+kyverno:
+  enabled: false
+  version: 3.2.0
+  policies:
+    enabled: false
+
+# Velero - Backup and disaster recovery
+velero:
+  enabled: false
+  version: 7.1.4
+  provider: gcp
+  # Provider-specific config defined in deployment-specific values
+
+# Falco - Runtime security monitoring
+falco:
+  enabled: false
+  version: 4.6.1
+  rules:
+    enabled: false
+
+# Monitoring - Prometheus + Grafana stack
+monitoring:
+  enabled: false
+  version: 11.3.9  # Bitnami kube-prometheus chart version

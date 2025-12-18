@@ -1,0 +1,154 @@
+# External DNS - Default Values
+# Multi-instance configuration supporting multiple DNS providers and accounts per namespace
+
+# Global enable/disable toggle
+enabled: true
+
+# External Secrets configuration
+# Creates ExternalSecret to sync DNS provider API token from secret manager
+externalSecrets:
+  enabled: false
+  secretStore: "gcp-secretstore"
+  refreshInterval: "1h"
+  remoteKey: ""  # Must be provided in deployment values
+  generator:
+    generate: false  # Manual input required (obtain from DNS provider)
+    type: token
+    description: ""  # Must be provided in deployment values
+
+# External DNS image configuration
+image:
+  registry: registry.k8s.io
+  repository: external-dns/external-dns
+  tag: "v0.19.0"
+  pullPolicy: IfNotPresent
+
+# Multiple External DNS instances
+# Each instance can have different provider, credentials, and settings
+instances: []
+  # Example: Single Cloudflare instance
+  # - name: primary
+  #   enabled: true
+  #   provider: cloudflare
+  #
+  #   # Domain filters (only manage these domains)
+  #   domainFilters:
+  #     - example.com
+  #     - example.net
+  #
+  #   # Cloudflare-specific configuration
+  #   cloudflare:
+  #     proxied: false  # Cloudflare proxy (CDN)
+  #     zoneidFilters: []  # Optional: specific zone IDs
+  #     apiTokenSecretRef:
+  #       name: cloudflare-api-token
+  #       key: api-token
+  #
+  #   # Resource limits
+  #   resources:
+  #     requests:
+  #       cpu: 10m
+  #       memory: 32Mi
+  #     limits:
+  #       cpu: 50m
+  #       memory: 64Mi
+
+  # Example: Multiple Cloudflare accounts
+  # - name: primary
+  #   enabled: true
+  #   provider: cloudflare
+  #   domainFilters: [example.com]
+  #   cloudflare:
+  #     apiTokenSecretRef: {name: cloudflare-token-primary}
+  #
+  # - name: client-subdomain
+  #   enabled: true
+  #   provider: cloudflare
+  #   domainFilters: [client.example.com]
+  #   cloudflare:
+  #     proxied: true
+  #     apiTokenSecretRef: {name: cloudflare-token-client}
+
+  # Example: AWS Route53
+  # - name: route53
+  #   enabled: true
+  #   provider: aws
+  #   domainFilters: [aws-hosted.com]
+  #   aws:
+  #     region: us-east-1
+  #     zoneType: public  # public or private
+  #   serviceAccount:
+  #     annotations:
+  #       eks.amazonaws.com/role-arn: arn:aws:iam::123:role/external-dns
+
+  # Example: Google Cloud DNS
+  # - name: google
+  #   enabled: true
+  #   provider: google
+  #   domainFilters: [gcp-app.com]
+  #   google:
+  #     project: my-gcp-project
+  #   serviceAccount:
+  #     annotations:
+  #       iam.gke.io/gcp-service-account: external-dns@project.iam
+
+# Global configuration applied to all instances
+global:
+  # Sources to watch (applied to all instances)
+  sources:
+    - gateway-httproute
+    - gateway-tcproute
+    - gateway-tlsroute
+    - service
+
+  # Policy: sync (create+update+delete) or upsert-only (create+update)
+  policy: sync
+
+  # Registry type for tracking ownership
+  registry: txt
+
+  # TXT record prefix
+  txtPrefix: "external-dns-"
+
+  # Log level: panic, debug, info, warning, error, fatal
+  logLevel: info
+
+  # Log format: text or json
+  logFormat: text
+
+  # Interval between DNS updates
+  interval: 1m
+
+  # Trigger loop on create (in addition to interval)
+  triggerLoopOnEvent: true
+
+  # Kubernetes API client tuning
+  kubeAPIBurst: 100  # Increase from default 50
+  kubeAPIQPS: 50     # Increase from default 25
+  requestTimeout: 2m # Increase from default 30s
+
+# Pod-level security context (PodSecurity restricted compliant)
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 65534  # nobody user
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod labels
+podLabels: {}
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Priority class
+priorityClassName: ""

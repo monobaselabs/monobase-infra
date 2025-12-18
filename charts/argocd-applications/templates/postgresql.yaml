@@ -1,0 +1,43 @@
+{{- if .Values.postgresql.enabled }}
+# ArgoCD Application: PostgreSQL Database
+# Sync Wave 2 - Deploy database before applications
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Values.global.namespace }}-postgresql
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: {{ .Values.argocd.repoURL }}
+    targetRevision: {{ .Values.argocd.targetRevision | default "HEAD" }}
+    path: charts/postgresql
+    helm:
+      releaseName: postgresql
+      # Pass postgresql section values directly to chart
+      # The deployment values file has postgresql config nested under 'postgresql:' key
+      valuesObject:
+        {{- .Values.postgresql | toYaml | nindent 8 }}
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.global.namespace }}
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        maxDuration: 5m
+{{- end }}

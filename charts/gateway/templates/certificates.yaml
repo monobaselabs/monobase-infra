@@ -1,0 +1,20 @@
+{{- range .Values.certificates }}
+{{- if .enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .name }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "gateway.labels" $ | nindent 4 }}
+spec:
+  secretName: {{ .name }}
+  dnsNames:
+    - {{ .hostname }}
+  issuerRef:
+    name: {{ $.Values.clusterIssuer }}
+    kind: ClusterIssuer
+    group: cert-manager.io
+{{- end }}
+{{- end }}

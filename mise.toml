@@ -1,0 +1,215 @@
+# Monobase Infrastructure - mise configuration
+# Tool management + task runner
+# Docs: https://mise.jdx.dev
+#
+# This project uses mise exclusively for tool version management.
+# All tools are declared here (no .tool-versions file).
+
+# =============================================================================
+# Tools
+# =============================================================================
+
+[tools]
+# Infrastructure as Code
+terraform = "1.9.8"
+kubectl = "1.31.1"
+helm = "3.16.2"
+k3d = "5.8.3"
+doctl = "latest"
+yq = "latest"
+
+# Runtime
+bun = "latest"
+
+# Linters and Formatters
+tflint = "0.54.0"
+yamllint = "1.35.1"
+shellcheck = "0.10.0"
+markdownlint-cli2 = "0.15.0"
+
+# =============================================================================
+# Environment Variables
+# =============================================================================
+
+[env]
+_.file = ".env.local"
+
+# =============================================================================
+# Tasks - Run with: mise run <task>
+# =============================================================================
+
+# Formatting
+# =============================================================================
+
+[tasks.fmt]
+description = "Format all code (Terraform)"
+run = "terraform fmt -recursive terraform/"
+
+# Linting
+# =============================================================================
+
+[tasks.lint-tf]
+description = "Lint Terraform files with tflint"
+run = """
+echo "Linting Terraform files..."
+(cd terraform/modules/aws-eks && tflint --config=../../../.tflint.hcl)
+(cd terraform/modules/azure-aks && tflint --config=../../../.tflint.hcl)
+(cd terraform/modules/gcp-gke && tflint --config=../../../.tflint.hcl)
+(cd terraform/modules/do-doks && tflint --config=../../../.tflint.hcl)
+(cd terraform/modules/on-prem-k3s && tflint --config=../../../.tflint.hcl)
+(cd terraform/modules/local-k3d && tflint --config=../../../.tflint.hcl)
+"""
+
+[tasks.lint-yaml]
+description = "Lint YAML files"
+run = """
+echo "Linting YAML files..."
+yamllint -c .yamllint .
+"""
+
+[tasks.lint-shell]
+description = "Lint shell scripts"
+run = """
+echo "Linting shell scripts..."
+find scripts -name "*.sh" -type f -exec shellcheck --severity=warning {} +
+"""
+
+[tasks.lint-md]
+description = "Lint and auto-fix Markdown files"
+run = """
+echo "Linting Markdown files..."
+markdownlint-cli2 --fix '**/*.md' --ignore node_modules --ignore .git 2>&1 || true
+"""
+
+[tasks.lint-helm]
+description = "Lint Helm charts"
+run = """
+echo "Linting Helm charts..."
+helm lint charts/api
+helm lint charts/account
+helm lint charts/namespace
+"""
+
+[tasks.lint]
+description = "Run all linters"
+depends = ["lint-tf", "lint-yaml", "lint-shell", "lint-helm", "lint-md"]
+run = "echo '✓ All linting complete'"
+
+# Validation
+# =============================================================================
+
+[tasks.validate-tf]
+description = "Validate Terraform modules"
+run = """
+echo "Validating Terraform modules..."
+(cd terraform/modules/aws-eks && terraform init -backend=false && terraform validate)
+(cd terraform/modules/azure-aks && terraform init -backend=false && terraform validate)
+(cd terraform/modules/gcp-gke && terraform init -backend=false && terraform validate)
+(cd terraform/modules/do-doks && terraform init -backend=false && terraform validate)
+(cd terraform/modules/on-prem-k3s && terraform init -backend=false && terraform validate)
+(cd terraform/modules/local-k3d && terraform init -backend=false && terraform validate)
+"""
+
+[tasks.validate-helm]
+description = "Validate Helm charts"
+run = """
+echo "Validating Helm charts..."
+helm template test charts/api --dry-run > /dev/null
+helm template test charts/account --dry-run > /dev/null
+helm template test charts/namespace --dry-run > /dev/null
+"""
+
+[tasks.validate]
+description = "Validate all (Terraform + Helm)"
+depends = ["validate-tf", "validate-helm"]
+run = "echo '✓ All validation complete'"
+
+# Combined
+# =============================================================================
+
+[tasks.check]
+description = "Run all checks (lint + validate)"
+depends = ["lint", "validate"]
+run = "echo '✓ All checks passed'"
+
+[tasks.fix]
+description = "Auto-fix issues where possible"
+depends = ["fmt", "lint-md"]
+run = "echo '✓ Auto-fix complete'"
+
+# Testing
+# =============================================================================
+
+[tasks.test-helm]
+description = "Run Helm unit tests"
+run = """
+echo "Running Helm unit tests..."
+if command -v helm unittest >/dev/null 2>&1; then
+    helm unittest charts/api
+    helm unittest charts/account
+else
+    echo "⚠ helm unittest not installed. Install: helm plugin install https://github.com/helm-unittest/helm-unittest"
+fi
+"""
+
+[tasks.detect-secrets]
+description = "Scan for secrets"
+run = """
+echo "Scanning for secrets..."
+if command -v detect-secrets >/dev/null 2>&1; then
+    detect-secrets scan --baseline .secrets.baseline || echo "Run: detect-secrets scan --update .secrets.baseline"
+else
+    echo "⚠ detect-secrets not installed. Install: pip install detect-secrets"
+fi
+"""
+
+# Utilities
+# =============================================================================
+
+[tasks.clean]
+description = "Clean up temporary files"
+run = """
+echo "Cleaning up..."
+find . -name ".terraform" -type d -exec rm -rf {} + 2>/dev/null || true
+echo "✓ Cleanup complete"
+"""
+
+
+# Scripts - Operations and Administration
+# =============================================================================
+
+[tasks.secrets]
+description = "Configure infrastructure secrets (TLS certificates, External Secrets)"
+run = 'bun scripts/secrets.ts "$@"'
+
+[tasks.bootstrap]
+description = "Bootstrap cluster with GitOps (includes GitHub App setup)"
+run = 'bun scripts/bootstrap.ts "$@"'
+
+[tasks.provision]
+description = "Provision Kubernetes cluster (uses cluster/ directory)"
+run = 'bun scripts/provision.ts "$@"'
+
+[tasks.admin]
+description = "Port-forward to admin UIs (argocd, grafana, prometheus, etc.)"
+run = 'bun scripts/admin.ts "$@"'
+
+[tasks.validate-template]
+description = "Validate infrastructure template (check for hardcoded values)"
+run = 'bun scripts/validate.ts "$@"'
+
+[tasks.validate-secrets]
+description = "Validate secrets configuration and connectivity"
+run = 'bun scripts/secrets.ts validate "$@"'
+
+[tasks.resize-storage]
+description = "Resize StatefulSet PVCs without downtime"
+run = 'bun scripts/resize.ts "$@"'
+
+[tasks.teardown]
+description = "Destroy cluster infrastructure - REQUIRES CONFIRMATION"
+run = 'bun scripts/provision.ts --destroy "$@"'
+
+[tasks.unbootstrap]
+description = "Unbootstrap cluster (destroy ArgoCD/Applications) - REQUIRES CONFIRMATION"
+run = 'bun scripts/bootstrap.ts --destroy "$@"'
