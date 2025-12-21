@@ -1,0 +1,304 @@
+# Acme Staging Configuration
+# Staging environment on DigitalOcean Kubernetes (DOKS)
+
+global:
+  domain: stg.acme.com
+  namespace: test-local
+  environment: development
+
+# ===== CORE: Monobase API =====
+api:
+  enabled: true
+
+  image:
+    tag: "0.1.4"
+
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  postgresql:
+    serviceName: postgresql
+
+  mailpit:
+    enabled: true
+
+  config:
+    # CORS
+    CORS_ORIGINS: "https://account.stg.acme.com,https://patient.stg.acme.com,https://provider.stg.acme.com,https://stg.acme.com"
+    # Auth
+    AUTH_BASE_URL: "https://api.stg.acme.com"
+    AUTH_SESSION_EXPIRES_IN: "604800"
+    # Email
+    EMAIL_PROVIDER: "smtp"
+    EMAIL_FROM_NAME: "Acme"
+    EMAIL_FROM_EMAIL: "noreply@acme.com"
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: "true"
+    RATE_LIMIT_MAX: "100"
+    # WebRTC - Google STUN servers
+    WEBRTC_ICE_SERVERS: "stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302"
+
+# ===== CORE: Monobase Account Frontend =====
+account:
+  enabled: true
+
+  image:
+    tag: "1.1.0"
+
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  config:
+    API_URL: "https://api.stg.acme.com"
+    ONESIGNAL_APP_ID: ""
+
+# ===== CORE: Patient Frontend =====
+patient:
+  enabled: true
+
+  image:
+    tag: "1.1.0"
+
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  config:
+    API_URL: "https://api.stg.acme.com"
+    ONESIGNAL_APP_ID: ""
+
+# ===== CORE: Provider Frontend =====
+provider:
+  enabled: true
+
+  image:
+    tag: "1.1.0"
+
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  config:
+    API_URL: "https://api.stg.acme.com"
+    ONESIGNAL_APP_ID: ""
+
+# ===== CORE: Website Frontend =====
+website:
+  enabled: true
+
+  image:
+    tag: "1.1.0"
+
+  replicaCount: 1
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  config:
+    API_URL: "https://api.stg.acme.com"
+    PATIENT_APP_URL: "https://patient.stg.acme.com"
+    PROVIDER_APP_URL: "https://provider.stg.acme.com"
+
+# ===== DATABASE: PostgreSQL =====
+postgresql:
+  enabled: true
+
+  # External Secrets configuration
+  externalSecrets:
+    enabled: true
+    remoteKey: acme-staging-postgresql-password
+    generator:
+      generate: true
+      type: password
+      description: PostgreSQL admin password
+
+  # Bitnami PostgreSQL subchart configuration
+  postgresql:
+    fullnameOverride: "postgresql"
+    architecture: standalone
+
+    image:
+      repository: bitnamilegacy/postgresql
+      tag: 16.4.0-debian-12-r13
+
+    auth:
+      enabled: true
+      existingSecret: postgresql
+      secretKeys:
+        adminPasswordKey: postgres-password
+      database: postgres
+      username: postgres
+
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 20Gi
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+    podDisruptionBudget:
+      enabled: false
+
+# ===== CACHE: Valkey (Redis) =====
+valkey:
+  enabled: false
+
+  architecture: standalone
+
+  image:
+    repository: bitnamilegacy/valkey
+    tag: 8.0.1-debian-12-r2
+
+  master:
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 4Gi
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# ===== STORAGE: MinIO Object Storage =====
+minio:
+  enabled: true
+
+  # External Secrets configuration
+  externalSecrets:
+    enabled: true
+    secrets:
+      - remoteKey: acme-staging-minio-root-password
+        generator:
+          generate: true
+          type: password
+          description: MinIO root password
+
+  # Bitnami MinIO subchart configuration
+  minio:
+    fullnameOverride: "minio"
+
+    image:
+      repository: bitnamilegacy/minio
+      tag: "2025.7.23-debian-12-r3"
+
+    mode: standalone
+
+    statefulset:
+      replicaCount: 1
+
+    auth:
+      existingSecret: minio
+
+    persistence:
+      enabled: true
+      storageClass: ""
+      size: 10Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+    defaultBuckets: "monobase-files"
+
+    buckets:
+      - name: "monobase-files"
+    region: "us-east-1"
+
+    podSecurityContext:
+      enabled: true
+      fsGroup: 1001
+      fsGroupChangePolicy: "OnRootMismatch"
+
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 1001
+      runAsGroup: 1001
+      runAsNonRoot: true
+      privileged: false
+      readOnlyRootFilesystem: true
+      allowPrivilegeEscalation: false
+      capabilities:
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+    gateway:
+      enabled: true
+      hostname: ""
+      rateLimit:
+        enabled: false
+
+# ===== EMAIL TESTING: Mailpit =====
+mailpit:
+  enabled: true
+
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+  gateway:
+    enabled: true
+    hostname: ""
+
+# ===== BACKUP =====
+backup:
+  enabled: false
+
+# ===== SECURITY =====
+podSecurityStandards:
+  enabled: true
+  level: restricted
+
+# ===== RESOURCE QUOTAS =====
+resourceQuotas:
+  enabled: false

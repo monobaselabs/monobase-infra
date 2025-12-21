@@ -6,7 +6,7 @@
 argocd:
   # Git repository for GitOps
   # DEPLOYMENT-SPECIFIC: Override chart default (template points to monobaselabs/monobase-infra)
-  repoURL: https://github.com/acme/monobase-infra.git
+  repoURL: https://github.com/monobaselabs/monobase-infra.git
   targetRevision: HEAD
 
   # ArgoCD Installation Configuration
@@ -60,7 +60,7 @@ argocd:
       # Git repository credentials
       repositories: |
         - type: git
-          url: https://github.com/acme/monobase-infra.git
+          url: https://github.com/monobaselabs/monobase-infra.git
 
       # Resource customizations
       resource.customizations: |
